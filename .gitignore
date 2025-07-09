@@ -1,0 +1,17 @@
+# Ignore virtual environments
+.venv/
+
+# Bytecode and cache
+__pycache__/
+*.py[cod]
+
+# VSCode settings (optional)
+.vscode/
+
+# Jupyter notebook metadata
+.ipynb_checkpoints/
+*.ipynb~
+
+# macOS metadata
+.DS_Store
+

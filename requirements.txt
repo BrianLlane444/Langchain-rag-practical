@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+langchain
+langchain-community
+langchain-core
+langchain-ollama
+chromadb
+pypdf
+pdfplumber
+tqdm
+python-dotenv
+requests
+jupyter
