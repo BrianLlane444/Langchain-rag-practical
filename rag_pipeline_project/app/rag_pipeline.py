@@ -1,9 +1,9 @@
-# rag_pipeline/app/rag_pipeline.py
+# rag_pipeline_project/app/rag_pipeline.py
 
 import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import OllamaEmbeddings
-from langchain.vectorstores import Chroma
+from langchain_community.vectorstores import Chroma
 from .pdf_loader import load_pdfs_from_folder
 from .ollama_client import ask_ollama
 from .utils import load_system_prompt, is_chroma_cache_present
@@ -48,6 +48,12 @@ def run_rag_pipeline(user_query: str, force_rebuild: bool = False) -> str:
     # Step 5: Retrieve relevant documents for the user's query
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
     relevant_docs = retriever.get_relevant_documents(user_query)
+
+       # --- DEBUG: show which chunks came back ---
+    print("\n--- Retrieved chunks ---")
+    for i, d in enumerate(relevant_docs, 1):
+        print(f"[Chunk {i}]\n{d.page_content[:300]}...\n")
+    # ------------------------------------------
 
     # Step 6: Build full prompt by combining system prompt + context + user question
     context = "\n\n".join([doc.page_content for doc in relevant_docs])

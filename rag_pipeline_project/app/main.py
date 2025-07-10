@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.endpoints import router
+from .endpoints import router
 
 app = FastAPI(
     title="Misinformation RAG API",
