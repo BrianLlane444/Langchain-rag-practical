@@ -3,6 +3,15 @@ import os
 import shutil
 from pathlib import Path
 
+# ---------- NEW helper ---------- #
+PROJECT_ROOT = Path(__file__).resolve().parent.parent   # rag_pipeline_project/
+
+def _abs(path: str | Path) -> Path:
+    """Return absolute path inside the project, no matter where CWD is."""
+    return (PROJECT_ROOT / path).resolve()
+
+# --------------------------------- #
+
 # -----------------------------------------------------------------------------
 #  System-prompt loader (dynamic path, same 
 # -----------------------------------------------------------------------------
@@ -56,17 +65,20 @@ def load_system_prompt() -> str:
 # -----------------------------------------------------------------------------
 def is_chroma_cache_present(folder: str = "embeddings/chromadb") -> bool:
     """
-    Return True if the Chroma persistent index folder exists and has files.
+    Return True if the Chroma persistent-index folder exists and is non-empty,
+    regardless of the current working directory.
     """
-    return os.path.exists(folder) and bool(os.listdir(folder))
+    cache_dir = _abs(folder)
+    return cache_dir.exists() and any(cache_dir.iterdir())
 
 
-def clear_cache(folder: str = "embeddings/chromadb"):
+def clear_cache(folder: str = "embeddings/chromadb") -> None:
     """
-    Deletes the vector store folder to force a fresh rebuild later.
+    Delete the vector-store folder so the next run rebuilds from scratch.
     """
-    if os.path.exists(folder):
-        shutil.rmtree(folder)
-        print(f"Cache cleared: {folder} deleted.")
+    cache_dir = _abs(folder)
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir)
+        print(f"🧹 Cache cleared: {cache_dir}")
     else:
-        print(f" No cache found at {folder}.")
+        print(f"🚫 No cache found at {cache_dir}")

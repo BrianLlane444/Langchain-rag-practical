@@ -1,41 +1,72 @@
-from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-import pdfplumber
+"""
+Embeds all PDFs under documents/sources/ into a Chroma DB.
+
+• Uses Ollama embedding model "nomic-embed-text"
+• Writes to embeddings/chromadb/
+• Skips work if the DB already exists
+"""
+
 import os
+from pathlib import Path
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.vectorstores import Chroma
+# If you installed langchain-ollama ≥0.3
+# from langchain_ollama import OllamaEmbeddings
+# else (community back-compat)
+from langchain_community.embeddings import OllamaEmbeddings
 
-DOCUMENTS_PATH = "documents/sources/"
-CHROMA_PATH = "embeddings/chromadb/"
 
-# 1. Load all PDFs
-def load_all_pdfs(folder_path):
-    texts = []
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".pdf"):
-            path = os.path.join(folder_path, filename)
-            with pdfplumber.open(path) as pdf:
-                for page in pdf.pages:
-                    texts.append(page.extract_text())
-    return "\n".join([t for t in texts if t])
+# ── Config ──────────────────────────────────────────────────────────
+DOCUMENTS_PATH = Path("documents/sources")
+PERSIST_DIR    = Path("embeddings/chromadb")
+EMBED_MODEL    = "nomic-embed-text"
+CHUNK_SIZE     = 1200
+CHUNK_OVERLAP  = 300
+# ────────────────────────────────────────────────────────────────────
 
-# 2. Split into chunks
-def split_text(text):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=100)
-    return splitter.split_text(text)
 
-# 3. Embed and store in ChromaDB
-def embed_documents(chunks):
-    embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    vectordb = Chroma.from_texts(chunks, embedding=embedding_model, persist_directory=CHROMA_PATH)
+def chroma_exists() -> bool:
+    """True if a Chroma index already lives at PERSIST_DIR."""
+    return PERSIST_DIR.exists() and any(PERSIST_DIR.iterdir())
+
+
+def load_documents(folder: Path):
+    docs = []
+    for pdf in folder.glob("*.pdf"):
+        docs.extend(PyPDFLoader(str(pdf)).load())
+    return docs
+
+
+def split_documents(docs):
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
+    )
+    return splitter.split_documents(docs)
+
+
+def build_index(chunks):
+    PERSIST_DIR.mkdir(parents=True, exist_ok=True)
+    embedder = OllamaEmbeddings(model=EMBED_MODEL)
+    vectordb = Chroma.from_documents(
+        documents=chunks,
+        embedding=embedder,
+        persist_directory=str(PERSIST_DIR),
+    )
     vectordb.persist()
-    print(f"Stored {len(chunks)} chunks in ChromaDB")
+    print(f"Stored {len(chunks)} chunks in {PERSIST_DIR}")
+
 
 if __name__ == "__main__":
-    print("Loading PDFs...")
-    full_text = load_all_pdfs(DOCUMENTS_PATH)
+    if chroma_exists():
+        print(f"Vector store already present at {PERSIST_DIR} — nothing to do.")
+    else:
+        print("Loading PDFs…")
+        raw_docs = load_documents(DOCUMENTS_PATH)
 
-    print("Splitting text into chunks...")
-    chunks = split_text(full_text)
+        print("Splitting into chunks…")
+        chunks = split_documents(raw_docs)
 
-    print("Embedding and storing in Chroma...")
-    embed_documents(chunks)
+        print("Embedding + saving to Chroma…")
+        build_index(chunks)
+

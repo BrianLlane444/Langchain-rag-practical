@@ -1,62 +1,83 @@
 # rag_pipeline_project/app/rag_pipeline.py
+"""
+End-to-end RAG pipeline
+----------------------
+1. Load & chunk all PDFs under documents/sources
+2. Embed chunks with an Ollama model (nomic-embed-text by default)
+3. Build or reuse a Chroma vector store
+4. Retrieve k most-similar chunks for a user query
+5. Build the final prompt (system + context + question)
+6. Ask Llama-3-70B and return the answer
+"""
 
 import os
+from pathlib import Path
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
-from .pdf_loader import load_pdfs_from_folder
-from .ollama_client import ask_ollama
+
+from .pdf_loader import load_pdfs_from_folder          # your loader → Document list
+from .ollama_client import ask_ollama                  # tiny REST helper
 from .utils import load_system_prompt, is_chroma_cache_present
 
-PERSIST_DIR = "embeddings/chromadb"
-SOURCE_DIR = "documents/sources"
+# --------------------------------------------------------------------
+# Configuration 
+# --------------------------------------------------------------------
+SOURCE_DIR   = "documents/sources"
+PERSIST_DIR  = "embeddings/chromadb"
 
-def run_rag_pipeline(user_query: str, force_rebuild: bool = False) -> str:
-    """
-    Executes the RAG pipeline:
-    1. Load & chunk PDFs
-    2. Embed documents and build or load Chroma index
-    3. Retrieve relevant chunks
-    4. Build system + context prompt
-    5. Send prompt to LLaMA model and return response
-    """
+EMBED_MODEL  = "nomic-embed-text"   # any Ollama embedding model
+CHAT_MODEL   = "llama3:70b"         # the LLM that writes the answer
 
-    # Step 1: System prompt is always loaded first
+CHUNK_SIZE       = 1200             # characters per chunk
+CHUNK_OVERLAP    = 300              # overlap between chunks
+RETRIEVE_K       = 10                # how many chunks to feed the prompt
+# --------------------------------------------------------------------
+
+
+def run_rag_pipeline(user_query: str, *, force_rebuild: bool = False) -> str:
+    """Run the full Retrieval-Augmented Generation pipeline."""
+    #1 Load system-prompt once
     system_prompt = load_system_prompt()
 
-    # Step 2: Decide whether to reuse or rebuild the vector store
+    #2 Load or rebuild the Chroma index
     if not force_rebuild and is_chroma_cache_present(PERSIST_DIR):
         print("Using cached ChromaDB index")
-        vectorstore = Chroma(persist_directory=PERSIST_DIR,
-                             embedding_function=OllamaEmbeddings(model="llama3.2:latest"))
+        vectorstore = Chroma(
+            persist_directory=PERSIST_DIR,
+            embedding_function=OllamaEmbeddings(model=EMBED_MODEL),
+        )
     else:
-        print("(Re)building ChromaDB index...")
+        print("(Re)building ChromaDB index…")
         docs = load_pdfs_from_folder(SOURCE_DIR)
 
-        # Step 3: Split text into chunks
-        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP
+        )
         split_docs = splitter.split_documents(docs)
 
-        # Step 4: Embed documents and persist
-        embedding_model = OllamaEmbeddings(model="llama3:70b")
-        vectorstore = Chroma.from_documents(documents=split_docs,
-                                            embedding=embedding_model,
-                                            persist_directory=PERSIST_DIR)
+        embedding_model = OllamaEmbeddings(model=EMBED_MODEL)
+        vectorstore = Chroma.from_documents(
+            documents=split_docs,
+            embedding=embedding_model,
+            persist_directory=PERSIST_DIR,
+        )
         vectorstore.persist()
         print("New ChromaDB index saved")
 
-    # Step 5: Retrieve relevant documents for the user's query
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    #3 Retrieve k most-similar chunks
+    retriever     = vectorstore.as_retriever(search_kwargs={"k": RETRIEVE_K})
     relevant_docs = retriever.get_relevant_documents(user_query)
 
-       # --- DEBUG: show which chunks came back ---
+    # --- DEBUG (optional): show what came back -----------------------
     print("\n--- Retrieved chunks ---")
     for i, d in enumerate(relevant_docs, 1):
-        print(f"[Chunk {i}]\n{d.page_content[:300]}...\n")
-    # ------------------------------------------
+        preview = d.page_content[:300].replace("\n", " ")
+        print(f"[Chunk {i}]\n{preview}…\n")
+    # -----------------------------------------------------------------
 
-    # Step 6: Build full prompt by combining system prompt + context + user question
-    context = "\n\n".join([doc.page_content for doc in relevant_docs])
+    #4 Build the prompt
+    context = "\n\n".join(doc.page_content for doc in relevant_docs)
     final_prompt = f"""{system_prompt}
 
 ## Retrieved Context
@@ -67,5 +88,8 @@ def run_rag_pipeline(user_query: str, force_rebuild: bool = False) -> str:
 
 ## Assistant:"""
 
-    # Step 7: Send the prompt to the local LLaMA model via REST and return its response
-    return ask_ollama(final_prompt)
+    #5 Ask the chat model via Ollama REST and return its answer
+    return ask_ollama(final_prompt, model=CHAT_MODEL)
+
+
+   
