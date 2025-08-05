@@ -1,7 +1,7 @@
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = "llama3:70b"               # fallback if caller omits model
+DEFAULT_MODEL = "llama3.1:8b"               # fallback if caller omits model AND SWITCH TO llama3:70b on big workstation
 
 
 def ask_ollama(prompt: str, model: str | None = None) -> str:
@@ -13,7 +13,7 @@ def ask_ollama(prompt: str, model: str | None = None) -> str:
     prompt : str
         The prompt to send.
     model : str, optional
-        Ollama model name ("llama3:70b").  If None, uses DEFAULT_MODEL.
+        Ollama model name ("llama3.1:8b").  If None, uses DEFAULT_MODEL.
     """
     payload = {
         "model": model or DEFAULT_MODEL,    # respects caller’s choice

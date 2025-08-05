@@ -11,13 +11,13 @@ This is a small working prototype of a Retrieval-Augmented Generation (RAG) pipe
 ---
 
  Future Work
- - OCR & Whisper for TikTok-based input
+ - OCR & Whisper for TikTok-based input 
  
- - Advanced prompt tuning
+ - Advanced prompt tuning [DONE]
 
- - Scalable backend with Docker
+ - Scalable backend with Docker [AlmostDONE]
 
- - Frontend interface (Streamlit or React)
+ - Frontend interface (Streamlit or React) [DONE]
  
 ---
 

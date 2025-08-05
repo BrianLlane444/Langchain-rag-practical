@@ -20,9 +20,10 @@ from langchain_community.embeddings import OllamaEmbeddings
 # ── Config ──────────────────────────────────────────────────────────
 DOCUMENTS_PATH = Path("documents/sources")
 PERSIST_DIR    = Path("embeddings/chromadb")
-EMBED_MODEL    = "nomic-embed-text"
+EMBED_MODEL    = "bge-m3"  # Ollama embedding model
 CHUNK_SIZE     = 1200
 CHUNK_OVERLAP  = 300
+
 # ────────────────────────────────────────────────────────────────────
 
 
