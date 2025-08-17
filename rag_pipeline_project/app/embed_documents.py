@@ -1,7 +1,7 @@
 """
 Embeds all PDFs under documents/sources/ into a Chroma DB.
 
-• Uses Ollama embedding model "nomic-embed-text"
+• Uses Ollama embedding model "bge-m3"
 • Writes to embeddings/chromadb/
 • Skips work if the DB already exists
 """

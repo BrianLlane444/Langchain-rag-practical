@@ -7,15 +7,15 @@ End-to-end RAG pipeline
 3) Build or reuse a Chroma vector store (cosine space)
 4) Retrieve top-k most similar chunks (0-1 relevance scores)
 5) Build final prompt (system + history + context + question)
-6) Ask Llama and return the answer
+6) Ask Llama and return the answer WITH chunk details
 """
 
 from __future__ import annotations
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_ollama import OllamaEmbeddings            # ← updated import
+from langchain_ollama import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain.schema import Document
 
@@ -29,22 +29,20 @@ PERSIST_DIR     = "embeddings/chromadb"
 COLLECTION_NAME = "de_politics"
 
 EMBED_MODEL = "bge-m3"                   # via Ollama
-CHAT_MODEL  = "llama3.1:8b"              # swap to 70b on workstation
+CHAT_MODEL  = "llama3.1:8b"              # swap to "llama3:70b" on workstation
+
+# Memory Management
+MEMORY_EXCHANGES = 5  # Number of Q&A pairs to keep (5 for 8b, can increase to 10 for 70b)
 
 # Chunking tuned for long party programs (German)
-CHUNK_SIZE    = 800
-CHUNK_OVERLAP = 120
+CHUNK_SIZE    = 800 #1000 for 70b model
+CHUNK_OVERLAP = 120 #
 
 # Retrieval
 RETRIEVE_K       = 4
 SCORE_THRESHOLD: Optional[float] = None  # e.g., 0.30–0.40 if you want filtering; None = disabled
 # ─────────────────────────────────────────────────────────────────────
 
-# Alternative settings for Llama 3:70B 
-# CHUNK_SIZE    = 1000
-# CHUNK_OVERLAP = 150
-# RETRIEVE_K    = 6
-# ────────────────────────────────────
 
 def _build_or_load_vectorstore(force_rebuild: bool = False) -> Chroma:
     """
@@ -105,8 +103,8 @@ def run_rag_pipeline(
     force_rebuild: bool = False,
     history_prompt_str: str = "",          # chat memory (already formatted text)
     system_prompt_str: Optional[str] = None,
-) -> str:
-    """Run the Retrieval-Augmented Generation pipeline and return the answer."""
+) -> Dict:  # CHANGED: Now returns a dict with response AND chunks
+    """Run the Retrieval-Augmented Generation pipeline and return the answer WITH chunk details."""
 
     # 1) System prompt
     system_prompt = system_prompt_str or load_system_prompt()
@@ -122,7 +120,7 @@ def run_rag_pipeline(
         score_threshold=SCORE_THRESHOLD,
     )
 
-    # Debug output
+    # Debug output (keep for terminal)
     print(f"\n--- Retrieved {len(results)} chunks ---")
     for i, (doc, score) in enumerate(results, 1):
         preview = doc.page_content[:200].replace("\n", " ").replace("  ", " ")
@@ -130,10 +128,27 @@ def run_rag_pipeline(
             source = Path(doc.metadata.get("source", "Unknown")).name
         except Exception:
             source = doc.metadata.get("source", "Unknown")
-        print(f"[Chunk {i}] (Score: {score:.3f}) {source} :: {preview}...")
+        page = doc.metadata.get("page", "?")
+        print(f"[Chunk {i}] (Score: {score:.3f}) {source} - Page {page} :: {preview}...")
     print("-" * 50)
 
-    # 4) Build context block
+    # Prepare chunks for return (to be shown in Streamlit)
+    retrieved_chunks = []
+    for i, (doc, score) in enumerate(results, 1):
+        try:
+            source_name = Path(doc.metadata.get("source", "Unknown")).name
+        except:
+            source_name = doc.metadata.get("source", "Unknown")
+        
+        retrieved_chunks.append({
+            "chunk_id": i,
+            "score": score,
+            "source": source_name,
+            "page": doc.metadata.get("page", "?"),
+            "content": doc.page_content[:300] + "..." if len(doc.page_content) > 300 else doc.page_content
+        })
+
+    # 4) Build context block with page numbers
     if not results:
         print("WARNING: No relevant documents found!")
         context_block = "Keine relevanten Dokumente gefunden."
@@ -141,8 +156,9 @@ def run_rag_pipeline(
         parts: List[str] = []
         for i, (doc, score) in enumerate(results, 1):
             source = doc.metadata.get("source", "Unknown")
-        
-        # Extract year from filename if possible
+            page = doc.metadata.get("page", "?")
+            
+            # Extract year from filename if possible
             if "2025" in source:
                 year_info = " (2025)"
             elif "2024" in source:
@@ -151,14 +167,17 @@ def run_rag_pipeline(
                 year_info = " (2023)"
             else:
                 year_info = ""
-        
-        parts.append(f"[Quelle {i} | Score {score:.3f} | {source}{year_info}]\n{doc.page_content}")
-    context_block = "\n\n".join(parts)
+            
+            # Include page number in context
+            parts.append(f"[Quelle {i} | Score {score:.3f} | {source}{year_info} | Seite {page}]\n{doc.page_content}")
+        context_block = "\n\n".join(parts)
 
     history_block = f"{history_prompt_str}\n\n" if history_prompt_str else ""
 
-    # 5) Final prompt (German UX)
+    # 5) Final prompt (German UX) - Updated to instruct model to cite with page numbers
     final_prompt = f"""{system_prompt}
+
+WICHTIG: Bitte zitiere alle verwendeten Quellen mit [Quellenname, Seite X] Format in deiner Antwort.
 
 {history_block}## VERFÜGBARE INFORMATIONEN:
 {context_block}
@@ -166,11 +185,17 @@ def run_rag_pipeline(
 ## BENUTZER FRAGT:
 {user_query}
 
-## ANTWORT:"""
+## ANTWORT (mit Quellenangaben inklusive Seitenzahlen):"""
 
     # Rough token estimate
     estimated_tokens = int(len(final_prompt.split()) * 1.3)
     print(f"Estimated prompt tokens: {estimated_tokens}")
 
-    # 6) Ask the chat model and return its answer
-    return ask_ollama(final_prompt, model=CHAT_MODEL)
+    # 6) Ask the chat model
+    llm_response = ask_ollama(final_prompt, model=CHAT_MODEL)
+    
+    # Return both response and chunks
+    return {
+        "response": llm_response,
+        "chunks": retrieved_chunks
+    }

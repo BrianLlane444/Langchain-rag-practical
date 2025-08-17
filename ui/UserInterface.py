@@ -18,7 +18,7 @@ TIMEOUT = 300
 # --------------------------------------------------- #
 
 # 1) Page config should be the first Streamlit call
-st.set_page_config(page_title="German-Politics RAG Chat", page_icon="🗳️")
+st.set_page_config(page_title="German-Politics RAG Chat", page_icon="🗳️", layout="wide")
 
 # 2) Session bookkeeping – one UUID per browser tab
 if "session_id" not in st.session_state:
@@ -26,6 +26,9 @@ if "session_id" not in st.session_state:
 
 if "history" not in st.session_state:
     st.session_state["history"] = []
+
+if "chunks_history" not in st.session_state:
+    st.session_state["chunks_history"] = []  # Store chunks for each query
 
 # 3) UI title and description
 st.title("German Politics Chat")
@@ -46,46 +49,84 @@ with st.sidebar:
                 timeout=TIMEOUT,
             )
             st.session_state["history"] = []
+            st.session_state["chunks_history"] = []
             st.success("Session cleared.")
-            # If you also want a brand-new session after reset, uncomment:
-            # st.session_state["session_id"] = str(uuid.uuid4())
             st.rerun()  # Refresh the page to clear chat
         except requests.RequestException as e:
             st.error(f"Could not reset session: {e}")
 
 # ------------------------------------------------------------------ #
-# 1) Show previous turns that came **from the backend**
+# Layout: Main chat on left, chunks on right
 # ------------------------------------------------------------------ #
-if "history" not in st.session_state:
-    st.session_state.history = []          # [(role, text), ...]
+col_chat, col_chunks = st.columns([2, 1])
 
-for role, msg in st.session_state.history:
-    st.chat_message(role).write(msg)
+with col_chat:
+    st.subheader("💬 Conversation")
+    
+    # Show previous turns
+    for i, (role, msg) in enumerate(st.session_state.history):
+        st.chat_message(role).write(msg)
+        
+        # Show chunks for assistant messages if available
+        if role == "assistant" and i // 2 < len(st.session_state.chunks_history):
+            chunks_idx = i // 2
+            if st.session_state.chunks_history[chunks_idx]:
+                with st.expander("📄 Retrieved Sources", expanded=False):
+                    for chunk in st.session_state.chunks_history[chunks_idx]:
+                        st.markdown(f"""
+                        **[Chunk {chunk['chunk_id']}]** Score: {chunk['score']:.3f}  
+                        📁 **{chunk['source']}** - Page {chunk['page']}  
+                        > {chunk['content']}
+                        
+                        ---
+                        """)
+
+with col_chunks:
+    st.subheader("Latest Retrieved Chunks")
+    if st.session_state.chunks_history and st.session_state.chunks_history[-1]:
+        for chunk in st.session_state.chunks_history[-1]:
+            with st.container():
+                st.markdown(f"""
+                ### Chunk {chunk['chunk_id']}
+                **Score:** {chunk['score']:.3f}  
+                **Source:** {chunk['source']}  
+                **Page:** {chunk['page']}
+                
+                <div style="background-color: #f0f0f0; padding: 10px; border-radius: 5px; margin: 10px 0;">
+                {chunk['content']}
+                </div>
+                """, unsafe_allow_html=True)
+                st.divider()
+    else:
+        st.info("Retrieved chunks will appear here after you ask a question.")
 
 # ------------------------------------------------------------------ #
-# 2) Reset conversation (server + client)
+# Reset conversation button
 # ------------------------------------------------------------------ #
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("Start new topic"):
-        try:
-            requests.post(
-                f"{BACKEND}/reset",
-                json={"session_id": st.session_state.session_id},
-                timeout=TIMEOUT,
-            )
-        except requests.RequestException as e:
-            st.toast(f"Backend said: {e}", icon="⚠️")
-        st.session_state.history.clear()
-        st.rerun()
+with col_chat:
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Start new topic"):
+            try:
+                requests.post(
+                    f"{BACKEND}/reset",
+                    json={"session_id": st.session_state.session_id},
+                    timeout=TIMEOUT,
+                )
+            except requests.RequestException as e:
+                st.toast(f"Backend said: {e}", icon="⚠️")
+            st.session_state.history.clear()
+            st.session_state.chunks_history.clear()
+            st.rerun()
 
 # ------------------------------------------------------------------ #
-# 3) User message → FastAPI → response
+# User message → FastAPI → response
 # ------------------------------------------------------------------ #
 user_msg = st.chat_input("Write your question …")
 
 if user_msg:
-    st.chat_message("user").write(user_msg)
+    with col_chat:
+        st.chat_message("user").write(user_msg)
 
     payload = {
         "session_id": st.session_state.session_id,
@@ -99,13 +140,32 @@ if user_msg:
     except requests.RequestException as e:
         st.error(f"Request failed: {e}")
     else:
-        # data = {"response": "...", "history": [...] }
+        # data = {"response": "...", "chunks": [...], "history": [...] }
         answer = data["response"]
-        st.chat_message("assistant").write(answer)
+        chunks = data.get("chunks", [])
+        
+        with col_chat:
+            st.chat_message("assistant").write(answer)
+            
+            # Show chunks inline with the response
+            if chunks:
+                with st.expander("Retrieved Sources", expanded=True):
+                    for chunk in chunks:
+                        st.markdown(f"""
+                        **[Chunk {chunk['chunk_id']}]** Score: {chunk['score']:.3f}  
+                        **{chunk['source']}** - Page {chunk['page']}  
+                        > {chunk['content']}
+                        
+                        ---
+                        """)
 
-        # keep full authoritative history from server
+        # Store chunks for this response
+        st.session_state.chunks_history.append(chunks)
+
+        # Keep full authoritative history from server
         st.session_state.history = [
             (m["role"], m["text"]) for m in data["history"]
         ]
+        
         st.rerun()   # so the freshly stored history renders on reload
 

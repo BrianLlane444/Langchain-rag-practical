@@ -1,8 +1,8 @@
 # app/endpoints.py
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict
-from .rag_pipeline import run_rag_pipeline
+from typing import List, Dict, Optional
+from .rag_pipeline import run_rag_pipeline, MEMORY_EXCHANGES
 from .utils import load_system_prompt
 
 router = APIRouter()
@@ -14,8 +14,16 @@ class QueryRequest(BaseModel):
     session_id: str        # a browser‑side UUID
     query: str
 
+class ChunkDetail(BaseModel):
+    chunk_id: int
+    score: float
+    source: str
+    page: Optional[int]
+    content: str
+
 class RAGResponse(BaseModel):
     response: str
+    chunks: List[ChunkDetail]  # NEW: Include retrieved chunks
     history: List[Dict[str, str]]   # echo the updated history back
 
 class SessionResetRequest(BaseModel):
@@ -41,20 +49,30 @@ async def generate_answer(request: QueryRequest):
         # 1) Get history for this session
         history = SESSION_MEMORY.get(request.session_id, [])
 
-        # 2) Build full prompt  (system + history + new Q + RAG context)
-        rag_answer = run_rag_pipeline(          # adds retrieved context
+        # 2) Build full prompt and get response WITH chunks
+        rag_result = run_rag_pipeline(          # NOW returns dict with response and chunks
             user_query         = request.query,
             force_rebuild      = False,
-            history_prompt_str = format_history(history),   # NEW ARG
-            system_prompt_str  = SYSTEM_PROMPT              # NEW ARG
+            history_prompt_str = format_history(history),
+            system_prompt_str  = SYSTEM_PROMPT
         )
 
-        # 3) Update memory  (store user Q + assistant A)
+        # 3) Extract response and chunks
+        rag_answer = rag_result["response"]
+        retrieved_chunks = rag_result["chunks"]
+
+        # 4) Update memory  (store user Q + assistant A)
         history.append({"role": "user",      "text": request.query})
         history.append({"role": "assistant", "text": rag_answer})
-        SESSION_MEMORY[request.session_id] = history[-10:]   # keep last 5 turns
+        # Keep last N complete exchanges (N Q&A pairs = N*2 items total)
+        max_items = MEMORY_EXCHANGES * 2
+        SESSION_MEMORY[request.session_id] = history[-max_items:]
 
-        return RAGResponse(response=rag_answer, history=history)
+        return RAGResponse(
+            response=rag_answer, 
+            chunks=retrieved_chunks,  # NEW: Include chunks
+            history=history
+        )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
