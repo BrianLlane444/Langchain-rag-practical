@@ -35,8 +35,8 @@ CHAT_MODEL  = "llama3.1:8b"              # swap to "llama3:70b" on workstation
 MEMORY_EXCHANGES = 5  # Number of Q&A pairs to keep (5 for 8b, can increase to 10 for 70b)
 
 # Chunking tuned for long party programs (German)
-CHUNK_SIZE    = 800 #1000 for 70b model
-CHUNK_OVERLAP = 120 #
+CHUNK_SIZE    = 800
+CHUNK_OVERLAP = 120
 
 # Retrieval
 RETRIEVE_K       = 4
@@ -177,7 +177,7 @@ def run_rag_pipeline(
     # 5) Final prompt (German UX) - Updated to instruct model to cite with page numbers
     final_prompt = f"""{system_prompt}
 
-WICHTIG: Bitte zitiere alle verwendeten Quellen mit [Quellenname, Seite X] Format in deiner Antwort.
+WICHTIG: Zitiere Quellen am ENDE deiner Antwort im Format: [Dokumentname, Seite X]
 
 {history_block}## VERFÜGBARE INFORMATIONEN:
 {context_block}
@@ -185,7 +185,8 @@ WICHTIG: Bitte zitiere alle verwendeten Quellen mit [Quellenname, Seite X] Forma
 ## BENUTZER FRAGT:
 {user_query}
 
-## ANTWORT (mit Quellenangaben inklusive Seitenzahlen):"""
+## ANTWORT:
+Bitte antworte vollständig und füge am ENDE eine Liste der verwendeten Quellen hinzu."""
 
     # Rough token estimate
     estimated_tokens = int(len(final_prompt.split()) * 1.3)

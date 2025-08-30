@@ -89,7 +89,7 @@ graph TB
 - Python 3.11+
 - Ollama installed and running
 - 16GB+ RAM (for 8b model)
-- 8GB+ free disk space
+
 
 ### Step 1: Clone Repository
 
@@ -268,11 +268,7 @@ The Motivational Interviewing style is configured in `app/system_prompt.md`. Mod
 ![Citations](screenshots/citations.png)
 *In-text citations with PDF sources and page numbers*
 
-### Mobile Responsive View
-![Mobile View](screenshots/mobile_view.png)
-*Responsive design for mobile devices*
 
----
 
 ## 🔧 Development
 
@@ -372,7 +368,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ##  Acknowledgments
 
-- **Supervisor**: Omed Abed for guidance on MI integration
+- **Supervisor**: Omed Abed
 
 ---
 
@@ -381,7 +377,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Author**: Brian Llane
 - **Email**: Brian.Llane@hsrw.org
 - **Institution**: Rhine-Waal University of Applied Sciences
-- **Project Link**: 
 
 ---
 

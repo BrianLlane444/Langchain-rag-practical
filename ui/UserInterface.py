@@ -3,11 +3,7 @@ ui/UserInterface.py
 Streamlit front end for the German Politics RAG demo.
 Run:  streamlit run ui/UserInterface.py
 
-The Streamlit script does HTTP calls only; it never imports from app/ollama_client.py or app/endpoints.py.
-It uses the FastAPI endpoints directly.
-It is a simple chat interface that allows users to ask questions and receive answers from the RAG pipeline.
-It maintains a session ID to keep track of the conversation history.
-It also provides a reset button to clear the conversation history.
+Now displays retrieved chunks with page numbers!
 """
 
 import uuid, os, requests, streamlit as st
@@ -18,7 +14,7 @@ TIMEOUT = 300
 # --------------------------------------------------- #
 
 # 1) Page config should be the first Streamlit call
-st.set_page_config(page_title="German-Politics RAG Chat", page_icon="🗳️", layout="wide")
+st.set_page_config(page_title="German-Politics RAG Chat", page_icon="🗳️")
 
 # 2) Session bookkeeping – one UUID per browser tab
 if "session_id" not in st.session_state:
@@ -56,68 +52,32 @@ with st.sidebar:
             st.error(f"Could not reset session: {e}")
 
 # ------------------------------------------------------------------ #
-# Layout: Main chat on left, chunks on right
+# Main chat interface (single column now)
 # ------------------------------------------------------------------ #
-col_chat, col_chunks = st.columns([2, 1])
 
-with col_chat:
-    st.subheader("💬 Conversation")
-    
-    # Show previous turns
-    for i, (role, msg) in enumerate(st.session_state.history):
-        st.chat_message(role).write(msg)
-        
-        # Show chunks for assistant messages if available
-        if role == "assistant" and i // 2 < len(st.session_state.chunks_history):
-            chunks_idx = i // 2
-            if st.session_state.chunks_history[chunks_idx]:
-                with st.expander("📄 Retrieved Sources", expanded=False):
-                    for chunk in st.session_state.chunks_history[chunks_idx]:
-                        st.markdown(f"""
-                        **[Chunk {chunk['chunk_id']}]** Score: {chunk['score']:.3f}  
-                        📁 **{chunk['source']}** - Page {chunk['page']}  
-                        > {chunk['content']}
-                        
-                        ---
-                        """)
+st.subheader("💬 Conversation")
 
-with col_chunks:
-    st.subheader("Latest Retrieved Chunks")
-    if st.session_state.chunks_history and st.session_state.chunks_history[-1]:
-        for chunk in st.session_state.chunks_history[-1]:
-            with st.container():
-                st.markdown(f"""
-                ### Chunk {chunk['chunk_id']}
-                **Score:** {chunk['score']:.3f}  
-                **Source:** {chunk['source']}  
-                **Page:** {chunk['page']}
-                
-                <div style="background-color: #f0f0f0; padding: 10px; border-radius: 5px; margin: 10px 0;">
-                {chunk['content']}
-                </div>
-                """, unsafe_allow_html=True)
-                st.divider()
-    else:
-        st.info("Retrieved chunks will appear here after you ask a question.")
+# Show previous turns
+for i, (role, msg) in enumerate(st.session_state.history):
+    st.chat_message(role).write(msg)
 
 # ------------------------------------------------------------------ #
 # Reset conversation button
 # ------------------------------------------------------------------ #
-with col_chat:
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Start new topic"):
-            try:
-                requests.post(
-                    f"{BACKEND}/reset",
-                    json={"session_id": st.session_state.session_id},
-                    timeout=TIMEOUT,
-                )
-            except requests.RequestException as e:
-                st.toast(f"Backend said: {e}", icon="⚠️")
-            st.session_state.history.clear()
-            st.session_state.chunks_history.clear()
-            st.rerun()
+col1, col2 = st.columns(2)
+with col1:
+    if st.button("Start new topic"):
+        try:
+            requests.post(
+                f"{BACKEND}/reset",
+                json={"session_id": st.session_state.session_id},
+                timeout=TIMEOUT,
+            )
+        except requests.RequestException as e:
+            st.toast(f"Backend said: {e}", icon="⚠️")
+        st.session_state.history.clear()
+        st.session_state.chunks_history.clear()
+        st.rerun()
 
 # ------------------------------------------------------------------ #
 # User message → FastAPI → response
@@ -125,8 +85,7 @@ with col_chat:
 user_msg = st.chat_input("Write your question …")
 
 if user_msg:
-    with col_chat:
-        st.chat_message("user").write(user_msg)
+    st.chat_message("user").write(user_msg)
 
     payload = {
         "session_id": st.session_state.session_id,
@@ -144,16 +103,26 @@ if user_msg:
         answer = data["response"]
         chunks = data.get("chunks", [])
         
-        with col_chat:
-            st.chat_message("assistant").write(answer)
+        # Display the assistant's response
+        with st.chat_message("assistant"):
+            st.write(answer)
             
-            # Show chunks inline with the response
+            # Show chunks below the response
             if chunks:
-                with st.expander("Retrieved Sources", expanded=True):
+                with st.expander("📄 Retrieved Sources", expanded=True):
                     for chunk in chunks:
+                        # Color code the score
+                        if chunk['score'] >= 0.7:
+                            score_color = "🟢"  # High relevance
+                        elif chunk['score'] >= 0.5:
+                            score_color = "🟡"  # Medium relevance
+                        else:
+                            score_color = "🔴"  # Low relevance
+                        
                         st.markdown(f"""
-                        **[Chunk {chunk['chunk_id']}]** Score: {chunk['score']:.3f}  
-                        **{chunk['source']}** - Page {chunk['page']}  
+                        {score_color} **[Chunk {chunk['chunk_id']}]** Relevance: {chunk['score']:.1%}  
+                        📁 **{chunk['source']}** - Page {chunk['page']}  
+                        
                         > {chunk['content']}
                         
                         ---
@@ -168,4 +137,3 @@ if user_msg:
         ]
         
         st.rerun()   # so the freshly stored history renders on reload
-
