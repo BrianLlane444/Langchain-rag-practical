@@ -1,20 +1,23 @@
-# Ignore virtual environments
+# Virtual env / caches
 .venv/
-
-# Bytecode and cache
 __pycache__/
 *.py[cod]
-
-# VSCode settings (optional)
+.DS_Store
 .vscode/
-
-# Jupyter notebook metadata
 .ipynb_checkpoints/
 *.ipynb~
 
-# macOS metadata
-.DS_Store
+# Env files
+.env
+*.env
 
+# Vector DB (Chroma)
 rag_pipeline_project/embeddings/
 
+# Notebooks cache (optional)
 rag_pipeline_project/app/notebooks/embeddings
+
+# Artifacts: ignore all, keep the diagram & export
+rag_pipeline_project/artifacts/**
+!rag_pipeline_project/artifacts/mi_graph.mmd
+!rag_pipeline_project/artifacts/mi_graph.png

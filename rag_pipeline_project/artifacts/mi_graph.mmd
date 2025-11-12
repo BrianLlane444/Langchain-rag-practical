@@ -1,0 +1,24 @@
+```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	analyze_stance(analyze_stance)
+	resistant_response(resistant_response)
+	curious_response(curious_response)
+	ready_response(ready_response)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> analyze_stance;
+	analyze_stance -. &nbsp;curious&nbsp; .-> curious_response;
+	analyze_stance -. &nbsp;ready&nbsp; .-> ready_response;
+	analyze_stance -. &nbsp;resistant&nbsp; .-> resistant_response;
+	curious_response --> __end__;
+	ready_response --> __end__;
+	resistant_response --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc
+```

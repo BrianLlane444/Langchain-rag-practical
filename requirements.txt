@@ -12,3 +12,9 @@ python-dotenv
 requests
 jupyter
 streamlit
+redis
+poppler
+graphviz
+tesseract
+pytesseract
+Pillow

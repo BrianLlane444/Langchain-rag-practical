@@ -4,7 +4,7 @@ from .endpoints import router
 app = FastAPI(
     title="Misinformation RAG API",
     description="Detect misinformation in German political content using RAG + Ollama",
-    version="1.0.0" #as our projects evolves
+    version="1.0.0" #as the project evolves
 )
 
 app.include_router(router)

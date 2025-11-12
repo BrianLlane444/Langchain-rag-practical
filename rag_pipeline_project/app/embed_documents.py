@@ -21,8 +21,8 @@ from langchain_community.embeddings import OllamaEmbeddings
 DOCUMENTS_PATH = Path("documents/sources")
 PERSIST_DIR    = Path("embeddings/chromadb")
 EMBED_MODEL    = "bge-m3"  # Ollama embedding model
-CHUNK_SIZE     = 1200
-CHUNK_OVERLAP  = 300
+CHUNK_SIZE     = 800
+CHUNK_OVERLAP  = 120
 
 # ────────────────────────────────────────────────────────────────────
 
