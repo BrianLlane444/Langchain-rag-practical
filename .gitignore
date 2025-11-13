@@ -20,4 +20,4 @@ rag_pipeline_project/app/notebooks/embeddings
 # Artifacts: ignore all, keep the diagram & export
 rag_pipeline_project/artifacts/**
 !rag_pipeline_project/artifacts/mi_graph.mmd
-!rag_pipeline_project/artifacts/mi_graph.png
+!rag_pipeline_project/artifacts/Graph_previewi.png

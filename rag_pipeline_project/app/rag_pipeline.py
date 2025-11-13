@@ -8,6 +8,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_ollama import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain.schema import Document
+from typing import Optional
 
 from .pdf_loader import load_pdfs_from_folder
 from .ollama_client import ask_ollama
@@ -216,19 +217,24 @@ def run_rag_pipeline(
     )
 
 
-# --- Optional compatibility shim (put at END of rag_pipeline.py) ---
-try:
-    _GLOBAL_PIPELINE
-except NameError:
+# --- Compatibility shim: keep old imports working (put at END of rag_pipeline.py) ---
+
+_GLOBAL_PIPELINE: Optional["RAGPipeline"] = globals().get("_GLOBAL_PIPELINE")
+if _GLOBAL_PIPELINE is None:
     _GLOBAL_PIPELINE = RAGPipeline()
 
-def run_rag_pipeline(user_query: str, *, force_rebuild: bool = False,
-                     history_prompt_str: str = "", system_prompt_str: str | None = None):
-    """Compat wrapper so old imports keep working."""
+def run_rag_pipeline(
+    user_query: str,
+    *,
+    force_rebuild: bool = False,
+    history_prompt_str: str = "",
+    system_prompt_str: str | None = None,
+):
+    """Back-compat: delegate legacy function to the class API."""
     return _GLOBAL_PIPELINE.generate(
         user_query=user_query,
         force_rebuild=force_rebuild,
         history_prompt_str=history_prompt_str,
         system_prompt_str=system_prompt_str,
     )
-# -------------------------------------------------------------------
+# --- end shim ---
