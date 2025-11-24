@@ -1,26 +1,35 @@
 # rag_pipeline_project/app/rag_pipeline.py
-from __future__ import annotations
+
+import os
+import math
 from pathlib import Path
 from typing import Optional, List, Tuple, Dict
 
-import math
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_ollama import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain.schema import Document
-from typing import Optional
+from langchain_core.documents import Document
 
 from .pdf_loader import load_pdfs_from_folder
 from .ollama_client import ask_ollama
 from .utils import load_system_prompt, is_chroma_cache_present
 
-# ─── Defaults (kept from your code) ───────────────────────────────────
+# ---------- Environment / networking ----------
+# Inside Docker, "localhost" means the container. Use host.docker.internal to reach the host’s services.
+OLLAMA_BASE_URL = (
+    os.getenv("OLLAMA_BASE_URL")
+    or os.getenv("OLLAMA_HOST")  # accept either var name
+    or "http://host.docker.internal:11434"
+)
+
+
+# ------------ Default variables ----------------
 DEFAULT_SOURCE_DIR      = "documents/sources"
 DEFAULT_PERSIST_DIR     = "embeddings/chromadb"
 DEFAULT_COLLECTION_NAME = "de_politics"
 
 DEFAULT_EMBED_MODEL = "bge-m3"          # via Ollama
-DEFAULT_CHAT_MODEL  = "llama3.1:8b"     # swap later if you want
+DEFAULT_CHAT_MODEL  = "llama3.1:8b"     # swap later if you want, try qwen2.5:14b if you have the RAM for it
 
 DEFAULT_MEMORY_EXCHANGES = 5
 DEFAULT_CHUNK_SIZE       = 800
@@ -30,7 +39,7 @@ DEFAULT_SCORE_THRESHOLD: Optional[float] = None  # e.g., 0.35
 
 MEMORY_EXCHANGES = DEFAULT_MEMORY_EXCHANGES  # imported by endpoints.py
 
-# ─── Helpers ──────────────────────────────────────────────────────────
+# ---------------- Helpers ----------------------
 def _cosine(a, b):
     # a,b are lists of floats
     da = math.sqrt(sum(x*x for x in a))
@@ -69,7 +78,7 @@ class RAGPipeline:
         self.use_mmr = True
 
         self._vectorstore: Optional[Chroma] = None
-        self._embedder = OllamaEmbeddings(model=self.embed_model)
+        self._embedder = OllamaEmbeddings(model=self.embed_model, base_url=OLLAMA_BASE_URL)
 
     # ------- vector store -------
     def _build_or_load_vectorstore(self, force_rebuild: bool = False) -> Chroma:
@@ -119,15 +128,41 @@ class RAGPipeline:
             search_type="mmr",
             search_kwargs={"k": k, "fetch_k": self.fetch_k, "lambda_mult": self.lambda_mult},
         )
-        return retriever.get_relevant_documents(query)
+        return retriever.invoke(query)
 
-    def retrieve(self, query: str, *, k: Optional[int] = None, force_rebuild: bool = False) -> List[Document]:
+    def retrieve(self, query: str, *, k: Optional[int] = None, force_rebuild: bool = False) -> List[Dict]:
         vs = self._ensure_vs(force_rebuild)
         k = k or self.retrieve_k
+    
+    # Get documents
         if self.use_mmr:
-            return self._mmr_retrieve(vs, query, k)
-        # fallback: vanilla similarity (no scores returned)
-        return [d for (d, _) in self._similarity_with_scores(vs, query, k)]
+            docs = self._mmr_retrieve(vs, query, k)
+        else:
+            docs = [d for (d, _) in self._similarity_with_scores(vs, query, k)]
+    
+        # Format into chunks with scores
+        q_emb = self._embedder.embed_query(query)
+        chunks = []
+        for i, d in enumerate(docs, 1):
+            src = d.metadata.get("source", "Unknown")
+            try:
+                source_name = Path(src).name
+            except Exception:
+                source_name = src
+        
+            d_emb = self._embedder.embed_query(d.page_content[:2000])
+            score = _cosine(q_emb, d_emb)
+        
+            chunks.append({
+                "chunk_id": i,
+                "score": float(score),
+                "source": source_name,
+                "page": d.metadata.get("page", "?"),
+                "content": d.page_content[:300] + "..." if len(d.page_content) > 300 else d.page_content,
+                "_full_content": d.page_content
+            })
+    
+        return chunks
 
     # ------- end-to-end -------
     def generate(
@@ -141,44 +176,28 @@ class RAGPipeline:
         system_prompt = system_prompt_str or load_system_prompt()
         vs = self._ensure_vs(force_rebuild)
 
-        # 1) Retrieve docs for context (MMR)
-        docs = self.retrieve(user_query, k=self.retrieve_k)
+      
 
-        # 2) Create display info with approximate scores (fast, 1 query embed + k doc embeds)
-        q_emb = self._embedder.embed_query(user_query)
-        retrieved_chunks = []
-        for i, d in enumerate(docs, 1):
-            src = d.metadata.get("source", "Unknown")
-            try:
-                source_name = Path(src).name
-            except Exception:
-                source_name = src
-            page = d.metadata.get("page", "?")
-            # embed each doc chunk (k is small, so this is OK)
-            d_emb = self._embedder.embed_query(d.page_content[:2000])
-            score = _cosine(q_emb, d_emb)
-            retrieved_chunks.append({
-                "chunk_id": i,
-                "score": float(score),
-                "source": source_name,
-                "page": page,
-                "content": d.page_content[:300] + "..." if len(d.page_content) > 300 else d.page_content
-            })
+        
+        # 2) Retrieve formatted chunks (already has scores)
+        retrieved_chunks = self.retrieve(user_query, k=self.retrieve_k)
 
         # 3) Context block
-        if not docs:
+        if not retrieved_chunks:
             print("WARNING: No relevant documents found!")
             context_block = "Keine relevanten Dokumente gefunden."
         else:
             parts: List[str] = []
-            for i, d in enumerate(docs, 1):
-                src = d.metadata.get("source", "Unknown")
-                page = d.metadata.get("page", "?")
+            for chunk in retrieved_chunks:
+                src = chunk["source"]
+                page = chunk["page"]
+                full_content = chunk.get("_full_content", chunk["content"])
                 year_info = ""
                 if "2025" in src: year_info = " (2025)"
                 elif "2024" in src: year_info = " (2024)"
                 elif "2023" in src: year_info = " (2023)"
-                parts.append(f"[Quelle {i} | {src}{year_info} | Seite {page}]\n{d.page_content}")
+                parts.append(f"[Quelle {chunk['chunk_id']} | {src}{year_info} | Seite {page}]\n{full_content}")
+            
             context_block = "\n\n".join(parts)
 
         history_block = f"{history_prompt_str}\n\n" if history_prompt_str else ""
@@ -199,25 +218,17 @@ Bitte antworte vollständig und füge am ENDE eine Liste der verwendeten Quellen
         print(f"Estimated prompt tokens: {estimated_tokens}")
 
         llm_response = ask_ollama(final_prompt, model=self.chat_model)
-        return {"response": llm_response, "chunks": retrieved_chunks}
-
-# ─── Legacy wrapper to avoid breaking callers ─────────────────────────
-def run_rag_pipeline(
-    user_query: str,
-    *,
-    force_rebuild: bool = False,
-    history_prompt_str: str = "",
-    system_prompt_str: Optional[str] = None,
-) -> Dict:
-    return RAGPipeline().generate(
-        user_query,
-        force_rebuild=force_rebuild,
-        history_prompt_str=history_prompt_str,
-        system_prompt_str=system_prompt_str,
-    )
+    
+       # Remove internal field before returning
+        returned_chunks = [
+            {k: v for k, v in chunk.items() if k != "_full_content"}
+            for chunk in retrieved_chunks
+    ]
+    
+        return {"response": llm_response, "chunks": returned_chunks}
 
 
-# --- Compatibility shim: keep old imports working (put at END of rag_pipeline.py) ---
+# --- Compatibility shim: keep old imports working ---
 
 _GLOBAL_PIPELINE: Optional["RAGPipeline"] = globals().get("_GLOBAL_PIPELINE")
 if _GLOBAL_PIPELINE is None:

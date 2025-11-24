@@ -1,26 +1,24 @@
-# rag_pipeline_project/Dockerfile
-FROM python:3.11-slim
-
+FROM python:3.12-slim
 WORKDIR /app
 
-# (Optional) system deps for OCR/PDF if you embed inside the container.
-# If you only serve an already-built index, you can skip this block.
+# system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    poppler-utils tesseract-ocr libmagic1 \
+    poppler-utils tesseract-ocr tesseract-ocr-deu libmagic1 curl \
   && rm -rf /var/lib/apt/lists/*
 
-# Copy app code
-COPY app /app/app
-COPY documents /app/documents
-COPY embeddings /app/embeddings
-COPY ../requirements.txt /tmp/requirements.txt
-
-# Install deps
+# 🔁 install Python deps first – enables layer caching
+COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-# Default envs: talk to Redis service in Compose; talk to host Ollama
-ENV REDIS_URL=redis://redis:6379/0
-ENV OLLAMA_HOST=http://host.docker.internal:11434
+# then copy code (you also mount it at runtime – this is just a sane default)
+COPY rag_pipeline_project/app /app/app
+RUN mkdir -p /app/documents/sources /app/embeddings
+
+# defaults; compose can override these
+ENV PYTHONUNBUFFERED=1 \
+    REDIS_URL=redis://host.docker.internal:6379/0 \
+    OLLAMA_HOST=http://host.docker.internal:11434 \
+    OLLAMA_BASE_URL=http://host.docker.internal:11434
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host","0.0.0.0","--port","8000"]
+CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"]

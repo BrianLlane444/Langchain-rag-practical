@@ -75,7 +75,7 @@ Gib NUR ein Wort zurück: resistant | curious | ready | neutral
 Der Nutzer wirkt widerständig/defensiv. Antworte im MI-Stil:
 - Gefühle anerkennen (Reflexion)
 - Keine Debatten
-- 1–2 offene Fragen
+- 1-2 offene Fragen
 - Kurze, ruhige Sätze
 - Quellen am Ende (Format: [Dokument, Seite X])
 

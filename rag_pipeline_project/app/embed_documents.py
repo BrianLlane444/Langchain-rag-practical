@@ -14,16 +14,17 @@ from langchain_community.vectorstores import Chroma
 # If you installed langchain-ollama ≥0.3
 # from langchain_ollama import OllamaEmbeddings
 # else (community back-compat)
-from langchain_community.embeddings import OllamaEmbeddings
-
+#from langchain_community.embeddings import OllamaEmbeddings
+from langchain_ollama import OllamaEmbeddings
 
 # ── Config ──────────────────────────────────────────────────────────
 DOCUMENTS_PATH = Path("documents/sources")
 PERSIST_DIR    = Path("embeddings/chromadb")
+COLLECTION_NAME = "de_politics"
 EMBED_MODEL    = "bge-m3"  # Ollama embedding model
 CHUNK_SIZE     = 800
 CHUNK_OVERLAP  = 120
-
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
 # ────────────────────────────────────────────────────────────────────
 
 
@@ -48,11 +49,12 @@ def split_documents(docs):
 
 def build_index(chunks):
     PERSIST_DIR.mkdir(parents=True, exist_ok=True)
-    embedder = OllamaEmbeddings(model=EMBED_MODEL)
+    embedder = OllamaEmbeddings(model=EMBED_MODEL, base_url=OLLAMA_BASE_URL)
     vectordb = Chroma.from_documents(
         documents=chunks,
         embedding=embedder,
         persist_directory=str(PERSIST_DIR),
+        collection_name=COLLECTION_NAME,
     )
     vectordb.persist()
     print(f"Stored {len(chunks)} chunks in {PERSIST_DIR}")
@@ -64,6 +66,10 @@ if __name__ == "__main__":
     else:
         print("Loading PDFs…")
         raw_docs = load_documents(DOCUMENTS_PATH)
+        
+        # Normalize source to just filename
+        for doc in raw_docs:
+            doc.metadata["source"] = Path(doc.metadata.get("source", "")).name
 
         print("Splitting into chunks…")
         chunks = split_documents(raw_docs)

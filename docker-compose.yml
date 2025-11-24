@@ -1,22 +1,24 @@
-version: "3.9"
 services:
   app:
     build:
-      context: ./rag_pipeline_project
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: rag_pipeline_project/Dockerfile
     environment:
-      REDIS_URL: redis://redis:6379/0
+      REDIS_URL: redis://host.docker.internal:6379/0
       OLLAMA_HOST: http://host.docker.internal:11434
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
     ports:
       - "8000:8000"
-    depends_on:
-      - redis
     volumes:
-      # persist the vector index & read PDFs from host
-      - ./rag_pipeline_project/embeddings:/app/embeddings
+      - ./rag_pipeline_project/app:/app/app
       - ./rag_pipeline_project/documents/sources:/app/documents/sources:ro
+      - ./rag_pipeline_project/embeddings:/app/embeddings
+    restart: unless-stopped
+    # Optional: mark the service healthy only when FastAPI is ready
+    # healthcheck:
+    #   test: ["CMD","curl","-fsS","http://localhost:8000/health"]
+    #   interval: 15s
+    #   timeout: 3s
+    #   retries: 10
+    #   start_period: 20s
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"

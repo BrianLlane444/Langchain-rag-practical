@@ -1,20 +1,27 @@
 fastapi
 uvicorn
+
+# LangChain - let pip resolve compatible versions
 langchain
 langchain-community
-langchain-core
 langchain-ollama
+langchain-text-splitters
+
+# LangGraph core only
+langgraph
+
+# RAG + PDF/OCR
 chromadb
 pypdf
 pdfplumber
+pdf2image
+pytesseract
+python-magic
+unstructured
+
+# Utils
 tqdm
 python-dotenv
 requests
-jupyter
 streamlit
 redis
-poppler
-graphviz
-tesseract
-pytesseract
-Pillow

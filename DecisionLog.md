@@ -21,3 +21,5 @@ B (fine-grained): keep langchain-core + langchain-community + langchain-ollama a
 - ask about redis change
 - Take screenshots if somewhat happy with the responses
 - Use docker and finish the report
+
+-put docker decision log.md asweell here or in rag_pipeline.

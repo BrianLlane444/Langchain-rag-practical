@@ -98,28 +98,30 @@ else:
     idx = st.selectbox("Quelle auswählen", range(len(latest_chunks)), format_func=lambda i: labels[i], index=0)
 
     chosen = latest_chunks[int(idx)]
-    src_name = Path(str(chosen.get("source", ""))).name  # sanitize
-    page_num = 1
+
+    # Always resolve to your host docs dir using just the filename
+    src_name = Path(str(chosen.get("source", ""))).name
+    pdf_path = Path(DOCS_DIR) / src_name
+
+    # Page number (safe fallback)
     try:
         page_num = int(chosen.get("page") or 1)
     except Exception:
         page_num = 1
-
-    # Resolve absolute PDF path: prefer absolute; else join with DOCS_DIR
-    pdf_path = Path(chosen.get("source", ""))
-    if not pdf_path.is_absolute():
-        pdf_path = Path(DOCS_DIR) / src_name
 
     if not pdf_path.exists():
         st.error(f"PDF nicht gefunden: {pdf_path}")
         st.caption(f"(Hinweis: DOCS_DIR = {DOCS_DIR})")
     else:
         try:
-            pages = convert_from_path(str(pdf_path), dpi=150, first_page=page_num, last_page=page_num)
-            st.image(pages[0], use_column_width=True, caption=f"{pdf_path.name} – Seite {page_num}")
+            pages = convert_from_path(
+                str(pdf_path), dpi=150, first_page=page_num, last_page=page_num
+            )
+            st.image(pages[0], use_column_width=True, caption=f"{pdf_path.name} - Seite {page_num}")
         except Exception as e:
             st.warning(f"Konnte die PDF-Seite nicht rendern (zeige nur Pfad). Grund: {e}")
             st.code(str(pdf_path))
+
 
 # ─────────────────────────────────────────────────────────────
 # Controls
