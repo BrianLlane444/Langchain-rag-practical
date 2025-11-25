@@ -342,7 +342,7 @@ Each response includes:
 ### Testing Redis Cache
 
 ```bash
-# Monitor Redis activity in real-time
+# Monitor Redis activity in real-time, use the first command below in one terminal window and the others after in a new one
 redis-cli MONITOR
 
 # Check cache statistics
