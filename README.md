@@ -549,8 +549,6 @@ print(f'Total chunks: {collection.count()}')
 docker compose exec app curl http://host.docker.internal:11434/api/tags
 ```
 
-
-
 ---
 
 ## 🐳 Docker Deployment
@@ -782,7 +780,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Supervisor**: Omed Abed
 - **Institution**: Rhine-Waal University of Applied Sciences
@@ -804,9 +802,78 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🔗 Related Projects
 
 - [LangChain Documentation](https://python.langchain.com/)
+- [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [Ollama](https://ollama.ai/)
 - [ChromaDB](https://www.trychroma.com/)
 - [Streamlit](https://streamlit.io/)
+
+---
+
+## 🚀 Future Improvements
+
+This project is actively being developed. Planned enhancements include:
+
+### 1. **Reranking for Better Retrieval**
+Currently, the system uses MMR (Maximal Marginal Relevance) for diversity. Future versions will implement:
+- **Cross-encoder reranking** (e.g., `bge-reranker-v2-m3`) to improve relevance after initial retrieval
+- **Two-stage retrieval**: Fast semantic search → precise reranking
+- **Cohere Rerank API** integration for production deployments
+
+### 2. **LangGraph Integration**
+Add **LangGraph** for more sophisticated agent workflows:
+- **Multi-step reasoning**: Break complex queries into sub-questions
+- **Self-correction**: Agent validates its own answers against sources
+- **Conditional routing**: Different processing paths for fact-checking vs. comparison queries
+- **Stateful conversations**: Persistent memory across sessions
+
+### 3. **Advanced RAG Techniques**
+- **Hypothetical Document Embeddings (HyDE)**: Generate hypothetical answers to improve retrieval
+- **Query decomposition**: Split complex questions into simpler sub-queries
+- **Contextual compression**: Remove irrelevant parts from retrieved chunks
+- **Parent-child chunking**: Retrieve small chunks but provide large context
+
+### 4. **Response Quality Improvements**
+- **Answer validation**: Cross-check citations against retrieved chunks
+- **Confidence scoring**: Rate answer reliability based on source quality
+- **Contradiction detection**: Identify conflicting information across sources
+- **Citation refinement**: More precise page + paragraph references
+
+### 5. **Performance Optimizations**
+- **Async processing**: Parallel retrieval and generation
+- **Batch embedding**: Faster document ingestion
+- **Quantized models**: Smaller, faster models (e.g., Llama 3.2 3B)
+- **Smart caching**: Context-aware cache keys
+
+### 6. **Production Features**
+- **User feedback loop**: Collect ratings to fine-tune retrieval
+- **A/B testing framework**: Compare different prompts/models
+- **Observability**: LangSmith integration for tracing
+- **Multi-language support**: Extend to English, French political documents
+
+### 7. **UI/UX Enhancements**
+- **Interactive citations**: Hover to preview source text
+- **Comparison mode**: Side-by-side party position views
+- **History tracking**: Save and revisit past conversations
+- **Export functionality**: PDF reports of fact-checked claims
+
+---
+
+## 🔬 Why Not LangGraph Yet?
+
+**LangGraph** is in the stack plan but not yet implemented. The current architecture uses:
+- **LangChain**: For document loaders, embeddings, and vector stores
+- **Custom RAG pipeline**: Direct Ollama API calls for simplicity
+
+**Reasons for future LangGraph migration:**
+1. **Simple queries work well** with current linear RAG flow
+2. **LangGraph benefits** emerge with complex multi-step reasoning
+3. **Incremental adoption**: Add LangGraph agents without breaking existing system
+4. **Learning curve**: Current setup is easier for contributors to understand
+
+**When to add LangGraph:**
+- Implementing multi-agent fact-checking workflows
+- Building self-correcting answer validation
+- Creating conditional logic for different query types
 
 ---
 
